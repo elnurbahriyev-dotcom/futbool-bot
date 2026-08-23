@@ -22,41 +22,38 @@ def run_flask():
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
 
-# Google Translate orqali matnni o'zbekchaga o'girish funksiyasi
 def translate_to_uz(text: str) -> str:
     try:
         url = f"https://googleapis.com{requests.utils.quote(text)}"
         response = requests.get(url, timeout=10).json()
-        translated_text = "".join([sentence[0] for sentence in response[0] if sentence[0]])
-        return translated_text
+        if response and response[0]:
+            translated_text = "".join([sentence[0] for sentence in response[0] if sentence[0]])
+            return translated_text
+        return text
     except Exception:
-        return text # Xato bo'lsa inglizcha matn qaytadi
+        return text
 
 def get_footballer_details(name: str):
     try:
-        # 1. Aniq topish uchun inglizcha qidiruvni ishlatamiz (Eldor Shomurodov aniq chiqadi)
         wikipedia.set_lang("en")
         search_query = f"{name.strip()} footballer"
         search_results = wikipedia.search(search_query)
         
-        if not search_results:
+        if not search_results or len(search_results) == 0:
             return {"text": f"? Afsuski, \'{name}\' haqida ma\'lumot topilmadi.", "image": None}
             
-        title = search_results
+        # MANA SHU YERDA [0] QO'YILDI! Ro'yxatning birinchi eng to'g'ri elementini oladi
+        title = search_results[0]
         page = wikipedia.page(title)
         
-        # 2. Inglizcha to'liq matnni ajratib olamiz
-        summary_en = wikipedia.summary(title, sentences=6)
-        
-        # 3. Matnni avtomatik O'zbekchaga tarjima qilamiz
+        summary_en = wikipedia.summary(title, sentences=5)
         summary_uz = translate_to_uz(summary_en)
         
-        # 4. Rasmini ajratib olamiz
         image_url = None
         if page.images:
             valid_images = [img for img in page.images if img.lower().endswith((".png", ".jpg", ".jpeg"))]
             if valid_images:
-                image_url = valid_images
+                image_url = valid_images[0]
 
         text = (
             f"?? **Futbolchi:** {page.title}\n\n"
@@ -67,15 +64,15 @@ def get_footballer_details(name: str):
         
     except Exception as e:
         print(f"Xatolik: {e}")
-        return {"text": f"? Afsuski, \'{name}\' haqida ma\'lumot topib bo\'lmadi. Ismini to\'g\'ri yozing.", "image": None}
+        return {"text": f"? Afsuski, \'{name}\' haqida ma\'lumot topib bo\'lmadi. Ismini inglizcha to\'g\'ri yozib ko\'ring.", "image": None}
 
 @dp.message(CommandStart())
 async def cmd_start(message: types.Message):
-    await message.answer("Salom! Menga istalgan futbolchining ismini yozing, men u haqida rasm va o\'zbekcha ma\'lumot chiqarib beraman.")
+    await message.answer("Salom! Menga istalgan futbolchining ismini yozing, rasm va o\'zbekcha ma\'lumot chiqaraman.")
 
 @dp.message()
 async def search_player(message: types.Message):
-    waiting_msg = await message.answer("?? Futbolchi qidirilmoqda, kuting...")
+    waiting_msg = await message.answer("?? Qidirilmoqda...")
     result = get_footballer_details(message.text)
     try:
         await waiting_msg.delete()
