@@ -22,33 +22,53 @@ def run_flask():
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
 
+# MyMemory API orqali 100% xavfsiz tarjima funksiyasi
 def translate_to_uz(text: str) -> str:
     try:
-        url = f"https://googleapis.com{requests.utils.quote(text)}"
-        response = requests.get(url, timeout=10).json()
-        if response and response[0]:
-            translated_text = "".join([sentence[0] for sentence in response[0] if sentence[0]])
-            return translated_text
-        return text
+        # Uzun matnni qismlarga bo'lib tarjima qilamiz, bloklanib qolmasligi uchun
+        sentences = text.split(". ")
+        translated_sentences = []
+        for sentence in sentences[:4]: # Faqat birinchi 4 ta gapni tarjima qilamiz
+            if not sentence.strip():
+                continue
+            url = f"https://translated.net{requests.utils.quote(sentence.strip())}&langpair=en|uz"
+            response = requests.get(url, timeout=10).json()
+            translated_text = response["responseData"]["translatedText"]
+            translated_sentences.append(translated_text)
+        return ". ".join(translated_sentences) + "."
     except Exception:
         return text
 
 def get_footballer_details(name: str):
     try:
-        wikipedia.set_lang("en")
-        search_query = f"{name.strip()} footballer"
-        search_results = wikipedia.search(search_query)
+        # Birinchi o'zbekcha Wikipedia'dan qidirib ko'ramiz
+        wikipedia.set_lang("uz")
+        search_results = wikipedia.search(f"{name.strip()} futbolchi")
         
+        # Agar o'zbekchasidan topilmasa, inglizchasidan qidiramiz
+        if not search_results:
+            wikipedia.set_lang("en")
+            search_results = wikipedia.search(f"{name.strip()} footballer")
+            
         if not search_results or len(search_results) == 0:
             return {"text": f"? Afsuski, \'{name}\' haqida ma\'lumot topilmadi.", "image": None}
             
-        # MANA SHU YERDA [0] QO'YILDI! Ro'yxatning birinchi eng to'g'ri elementini oladi
         title = search_results[0]
-        page = wikipedia.page(title)
         
-        summary_en = wikipedia.summary(title, sentences=5)
-        summary_uz = translate_to_uz(summary_en)
-        
+        # Sahifani va rasmini inglizcha Wikipedia orqali aniq yuklaymiz (chunki inglizchasida rasmlar ko'p)
+        wikipedia.set_lang("en")
+        try:
+            page = wikipedia.page(title)
+            summary_en = wikipedia.summary(title, sentences=5)
+            summary_uz = translate_to_uz(summary_en)
+            page_url = page.url
+        except Exception:
+            # Agar inglizchasida xato bersa, o'zbekchasini o'qiymiz
+            wikipedia.set_lang("uz")
+            page = wikipedia.page(title)
+            summary_uz = wikipedia.summary(title, sentences=5)
+            page_url = page.url
+
         image_url = None
         if page.images:
             valid_images = [img for img in page.images if img.lower().endswith((".png", ".jpg", ".jpeg"))]
@@ -58,17 +78,17 @@ def get_footballer_details(name: str):
         text = (
             f"?? **Futbolchi:** {page.title}\n\n"
             f"???? **Batafsil ma\'lumot (O\'zbek tilida):**\n{summary_uz}\n\n"
-            f"?? [Wikipedia sahifasi]({page.url})"
+            f"?? [Wikipedia sahifasi]({page_url})"
         )
         return {"text": text, "image": image_url}
         
     except Exception as e:
         print(f"Xatolik: {e}")
-        return {"text": f"? Afsuski, \'{name}\' haqida ma\'lumot topib bo\'lmadi. Ismini inglizcha to\'g\'ri yozib ko\'ring.", "image": None}
+        return {"text": f"? Afsuski, \'{name}\' haqida ma\'lumot topib bo\'lmadi. Ismini to\'g\'ri yozing.", "image": None}
 
 @dp.message(CommandStart())
 async def cmd_start(message: types.Message):
-    await message.answer("Salom! Menga istalgan futbolchining ismini yozing, rasm va o\'zbekcha ma\'lumot chiqaraman.")
+    await message.answer("Salom! Menga istalgan futbolchining ismini yozing, men u haqida rasm va o\'zbekcha ma\'lumot chiqarib beraman.")
 
 @dp.message()
 async def search_player(message: types.Message):
