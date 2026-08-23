@@ -22,57 +22,56 @@ def run_flask():
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
 
+# Google Translate orqali matnni o'zbekchaga o'girish funksiyasi
+def translate_to_uz(text: str) -> str:
+    try:
+        url = f"https://googleapis.com{requests.utils.quote(text)}"
+        response = requests.get(url, timeout=10).json()
+        translated_text = "".join([sentence[0] for sentence in response[0] if sentence[0]])
+        return translated_text
+    except Exception:
+        return text # Xato bo'lsa inglizcha matn qaytadi
+
 def get_footballer_details(name: str):
     try:
-        # Wikipedia adashib ketmasligi uchun ism yoniga "footballer" so'zini qo'shib qidiramiz
-        search_query = f"{name.strip()} footballer"
-        
+        # 1. Aniq topish uchun inglizcha qidiruvni ishlatamiz (Eldor Shomurodov aniq chiqadi)
         wikipedia.set_lang("en")
-        # Birinchi bo'lib eng yaqin mos keluvchi maqola sarlavhasini aniqlaymiz
+        search_query = f"{name.strip()} footballer"
         search_results = wikipedia.search(search_query)
+        
         if not search_results:
             return {"text": f"? Afsuski, \'{name}\' haqida ma\'lumot topilmadi.", "image": None}
             
-        title = search_results[0]
+        title = search_results
+        page = wikipedia.page(title)
         
-        # Inglizcha sahifadan rasmini olamiz
+        # 2. Inglizcha to'liq matnni ajratib olamiz
+        summary_en = wikipedia.summary(title, sentences=6)
+        
+        # 3. Matnni avtomatik O'zbekchaga tarjima qilamiz
+        summary_uz = translate_to_uz(summary_en)
+        
+        # 4. Rasmini ajratib olamiz
         image_url = None
-        try:
-            en_page = wikipedia.page(title)
-            if en_page.images:
-                valid_images = [img for img in en_page.images if img.lower().endswith((".png", ".jpg", ".jpeg"))]
-                if valid_images:
-                    image_url = valid_images[0]
-        except Exception:
-            pass
-
-        # Matnni o'zbekcha Wikipedia'dan qidiramiz (aniq topilgan sarlavha bo'yicha)
-        wikipedia.set_lang("uz")
-        try:
-            summary = wikipedia.summary(title, sentences=8)
-            page_url = wikipedia.page(title).url
-        except Exception:
-            # Agar o'zbekchasida maqola chiqmasa, inglizcha matnni o'zini oladi
-            wikipedia.set_lang("en")
-            summary = wikipedia.summary(title, sentences=8)
-            page_url = wikipedia.page(title).url
+        if page.images:
+            valid_images = [img for img in page.images if img.lower().endswith((".png", ".jpg", ".jpeg"))]
+            if valid_images:
+                image_url = valid_images
 
         text = (
-            f"?? **Futbolchi:** {title}\n\n"
-            f"?? **Batafsil ma\'lumot:**\n{summary}\n\n"
-            f"?? [Wikipedia sahifasi]({page_url})"
+            f"?? **Futbolchi:** {page.title}\n\n"
+            f"???? **Batafsil ma\'lumot (O\'zbek tilida):**\n{summary_uz}\n\n"
+            f"?? [Wikipedia sahifasi]({page.url})"
         )
         return {"text": text, "image": image_url}
         
-    except wikipedia.exceptions.DisambiguationError as e:
-        return {"text": f"? Bir nechta variant topildi. Iltimos, ismini to'liqroq yozing.", "image": None}
     except Exception as e:
         print(f"Xatolik: {e}")
-        return {"text": f"? Afsuski, \'{name}\' haqida ma\'lumot topilmadi.", "image": None}
+        return {"text": f"? Afsuski, \'{name}\' haqida ma\'lumot topib bo\'lmadi. Ismini to\'g\'ri yozing.", "image": None}
 
 @dp.message(CommandStart())
 async def cmd_start(message: types.Message):
-    await message.answer("Salom! Menga istalgan futbolchining ismini yozing, men u haqida rasm va to'liq ma\'lumot chiqarib beraman.")
+    await message.answer("Salom! Menga istalgan futbolchining ismini yozing, men u haqida rasm va o\'zbekcha ma\'lumot chiqarib beraman.")
 
 @dp.message()
 async def search_player(message: types.Message):
